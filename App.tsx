@@ -1,20 +1,27 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from "react";
+import { NavigationContainer } from "@react-navigation/native";
+import MainNavigator from "./app/navigation/MainNavigator";
+// import { User, onAuthStateChanged } from 'firebase/auth';
+// import { FIREBASE_AUTH } from "./FirebaseConfig";
+
+
 
 export default function App() {
+  // const [user, setUser] = useState<User | null>(null);
+
+  // useEffect(() => {
+  //   const unsubscribe = onAuthStateChanged(FIREBASE_AUTH, (user) => {
+  //     setUser(user);
+  //   });
+    
+  //   // Clean up subscription on unmount
+  //   return unsubscribe;
+  // }, []);
+  console.log("app");
+  
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <NavigationContainer>
+      <MainNavigator />      
+    </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
