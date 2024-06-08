@@ -48,15 +48,15 @@ const Home = ({ navigation }: RouterProps) => {
     try {
       const createdQuery = query(collection(FIREBASE_DB, 'project'), where('creatorId', '==', uid));
       const assignedQuery = query(collection(FIREBASE_DB, 'project'), where('assignedMembers', 'array-contains', uid));
-
+      
       const [createdSnapshot, assignedSnapshot] = await Promise.all([
         getDocs(createdQuery),
         getDocs(assignedQuery),
       ]);
-
+      
       const projectsData: ProjectData[] = [];
       const userIds = new Set<string>();
-
+      
       const processSnapshot = (snapshot: any) => {
         snapshot.forEach((doc: any) => {
           const data = doc.data();
@@ -65,11 +65,15 @@ const Home = ({ navigation }: RouterProps) => {
           });
         });
       };
-
+      
       processSnapshot(createdSnapshot);
       processSnapshot(assignedSnapshot);
-
+      
+      console.log("befropre");
+      console.log(userIds);
+      
       const userDocs = await Promise.all(Array.from(userIds).map(userId => getDoc(doc(FIREBASE_DB, 'users', userId))));
+      console.log("after");
       const usersMap: { [key: string]: UserData } = {};
 
       userDocs.forEach(userDoc => {
@@ -80,6 +84,8 @@ const Home = ({ navigation }: RouterProps) => {
           // console.log(`User document with ID ${userDoc.id} does not exist`);
         }
       });
+      console.log("userDocs",userDocs);
+      console.log("usersMap",usersMap);
 
       const populateProjectsData = (snapshot: any) => {
         snapshot.forEach((doc: any) => {
@@ -100,7 +106,8 @@ const Home = ({ navigation }: RouterProps) => {
           });
         });
       };
-
+      console.log("projectsData",projectsData);
+      
       populateProjectsData(createdSnapshot);
       populateProjectsData(assignedSnapshot);
 
