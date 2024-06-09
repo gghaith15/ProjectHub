@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, Modal, TextInput } from 'react-native';
 import { NavigationProp, CommonActions } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -7,7 +7,7 @@ import { FIREBASE_DB, auth } from '../../../FirebaseConfig';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { FontAwesome } from '@expo/vector-icons';
-import { signOut } from 'firebase/auth';
+import { signOut, updateEmail, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 
 interface RouterProps {
     navigation: NavigationProp<any, any>;
@@ -18,6 +18,8 @@ const Profile = ({ navigation }: RouterProps) => {
     const [userName, setUserName] = useState<string>('');
     const [userEmail, setUserEmail] = useState<string>('');
     const [userDocId, setUserDocId] = useState<string | null>(null);
+    const [editModalVisible, setEditModalVisible] = useState(false);
+    const [newName, setNewName] = useState<string>('');
 
     useEffect(() => {
         const clearLocalProfilePicture = async () => {
@@ -43,7 +45,6 @@ const Profile = ({ navigation }: RouterProps) => {
                         setUserDocId(userDoc.id);
                           
                         if (data?.profilePhoto) {
-                            // console.log("Profile picture URL fetched:", data.profilePhoto);
                             setProfilePicture(data.profilePhoto);
                             await AsyncStorage.setItem('profilePicture', data.profilePhoto);
                         }
@@ -95,6 +96,34 @@ const Profile = ({ navigation }: RouterProps) => {
         }
     };
 
+    const handleEditUserData = () => {
+        setNewName(userName);
+        setEditModalVisible(true);
+    };
+
+    const handleSaveUserData = async () => {
+        try {
+            if (!newName) {
+                Alert.alert('Please fill in the name field');
+                return;
+            }
+
+            if (userDocId) {
+                const userDocRef = doc(FIREBASE_DB, 'users', userDocId);
+                await updateDoc(userDocRef, { name: newName });
+
+                setUserName(newName);
+                setEditModalVisible(false);
+                Alert.alert('Profile updated successfully');
+            } else {
+                console.error("No user document ID found.");
+            }
+        } catch (error) {
+            console.error('Error updating user data:', error);
+            Alert.alert('Error updating user data:', error.message);
+        }
+    };
+
     const handleLogout = async () => {
         try {
             await signOut(auth);
@@ -111,7 +140,7 @@ const Profile = ({ navigation }: RouterProps) => {
             Alert.alert('Error logging out:', error.message);
         }
     };
-console.log(profilePicture);
+    console.log(profilePicture);
 
     return (
         <View style={styles.container}>
@@ -131,12 +160,29 @@ console.log(profilePicture);
             </TouchableOpacity>
             <Text style={styles.userName}>{userName || 'User'}</Text>
             <Text style={styles.userEmail}>{userEmail}</Text>
-            <TouchableOpacity style={styles.editButton} onPress={() => Alert.alert('Edit Profile')}>
+            <TouchableOpacity style={styles.editButton} onPress={handleEditUserData}>
                 <FontAwesome name="pencil" size={20} color="#C9EF76" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
                 <Text style={styles.logoutButtonText}>Log Out</Text>
             </TouchableOpacity>
+
+            <Modal visible={editModalVisible} animationType="slide">
+                <View style={styles.modalContainer}>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Name"
+                        value={newName}
+                        onChangeText={setNewName}
+                    />
+                    <TouchableOpacity style={styles.saveButton} onPress={handleSaveUserData}>
+                        <Text style={styles.saveButtonText}>Save</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.cancelButton} onPress={() => setEditModalVisible(false)}>
+                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                </View>
+            </Modal>
         </View>
     );
 };
@@ -167,6 +213,7 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#fff',
         textAlign: 'center',
+        marginTop: 60,
     },
     userName: {
         marginTop: 20,
@@ -197,6 +244,43 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         color: '#fff',
+    },
+    modalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    },
+    input: {
+        backgroundColor: '#fff',
+        padding: 10,
+        borderRadius: 5,
+        width: '80%',
+        marginBottom: 10,
+    },
+    saveButton: {
+        backgroundColor: '#C9EF76',
+        padding: 10,
+        borderRadius: 5,
+        width: '80%',
+        alignItems: 'center',
+        marginBottom: 5,
+        marginTop: 10,
+    },
+    saveButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+    },
+    cancelButton: {
+        backgroundColor: '#FF6347',
+        padding: 10,
+        borderRadius: 5,
+        width: '80%',
+        alignItems: 'center',
+    },
+    cancelButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
     },
 });
 

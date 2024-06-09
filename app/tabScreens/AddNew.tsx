@@ -141,17 +141,17 @@ const AddNew = ({ navigation }: Props) => {
   const handleCreate = async () => {
     
     if (createType === 'Project') {
-      console.log('Create Project:', projectInfo);
+      // console.log('Create Project:', projectInfo);
 
       try {
         
         const docRef = await addDoc(collection(FIREBASE_DB, 'project'), projectInfo);
-        console.log('Project added with ID: ', docRef.id);
+        // console.log('Project added with ID: ', docRef.id);
       } catch (error) {
         console.error('Error adding project: ', error);
       }
         } else if (createType === 'Task') {
-      console.log('Create Task:', taskInfo);
+      // console.log('Create Task:', taskInfo);
       // Logic to handle creating a task
     }
     handleCloseModal();

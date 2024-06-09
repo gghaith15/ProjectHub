@@ -48,8 +48,10 @@ const MemberModal = ({ visible, members, currentUserId, creatorId, onClose, onAd
                 style={styles.input}
                 placeholder="Enter member email"
                 value={newMemberEmail}
-                onChangeText={setNewMemberEmail}
-              />
+                onChangeText={(text) => {
+                    // console.log("TextInput value:", text);
+                    setNewMemberEmail(text);
+                  }} />
               <View style={styles.addMemberButtons}>
                 <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmAddMember}>
                   <Text style={styles.confirmButtonText}>Add</Text>

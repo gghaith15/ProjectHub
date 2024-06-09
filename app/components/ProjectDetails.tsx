@@ -34,7 +34,10 @@ interface AssignedMember {
 interface Task {
   id: string;
   taskDetails: string;
-  deadline?: string;
+  deadline: Timestamp;
+  projectId: string;
+  isChecked: boolean;
+  createdAt: Timestamp;
 }
 
 const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation, route }) => {
@@ -68,7 +71,6 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
   const [taskDeadline, setTaskDeadline] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
 
-
   useEffect(() => {
     const fetchProjectData = async () => {
       try {
@@ -76,11 +78,9 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
         const docSnapshot = await getDoc(projectDocRef);
         if (docSnapshot.exists()) {
           const projectData = docSnapshot.data() as ProjectData;
-    
-          // Ensure assignedMembers is an array of strings (member IDs)
+
           const assignedMemberIds = Array.isArray(projectData.assignedMembers) ? projectData.assignedMembers : [];
           const memberPromises = assignedMemberIds.map(async (memberId: any) => {
-            console.log('Fetching member details for memberId:', memberId);
             const memberDocRef = doc(FIREBASE_DB, 'users', memberId);
             const memberDoc = await getDoc(memberDocRef);
             if (memberDoc.exists()) {
@@ -93,9 +93,9 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
             console.error('Member document does not exist for memberId:', memberId);
             return { memberId: memberId, name: 'Unknown', email: 'Unknown', profilePhoto: undefined };
           });
-    
+
           const detailedMembers = await Promise.all(memberPromises);
-    
+
           setProjectData({
             ...projectData,
             assignedMembers: detailedMembers,
@@ -105,29 +105,30 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
           setNewProjectStartDate(projectData.startDate.toDate());
           setNewProjectEndDate(projectData.endDate.toDate());
           setNewPriority(projectData.priority);
-        } else {
-          console.log('Project not found');
         }
       } catch (error) {
         console.error('Error fetching project data:', error);
       }
     };
-    
-    
-    const fetchTasks = () => {
-      const q = query(collection(FIREBASE_DB, 'tasks'), where('projectId', '==', project.projectId));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const fetchedTasks: Task[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          fetchedTasks.push({
-            id: doc.id,
-            taskDetails: data.taskDetails,
-            deadline: data.deadline ? data.deadline.toDate().toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'No deadline',
+
+    const subscribeToProject = () => {
+      const projectDocRef = doc(FIREBASE_DB, 'project', project.projectId);
+      const unsubscribe = onSnapshot(projectDocRef, (doc) => {
+        if (!doc.exists()) {
+          // Remove the project data if the document is deleted
+          setProjectData({
+            projectName: '',
+            projectDescription: '',
+            startDate: new Timestamp(0, 0),
+            endDate: new Timestamp(0, 0),
+            priority: '',
+            assignedMembers: [],
+            creatorId: '',
           });
-        });
-        console.log('Fetched tasks:', fetchedTasks);
-        setTasks(fetchedTasks);
+        } else {
+          // Update the project data if the document still exists
+          fetchProjectData();
+        }
       });
       return unsubscribe;
     };
@@ -140,17 +141,100 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
     });
 
     fetchProjectData();
-    const unsubscribe = fetchTasks();
+    const unsubscribeProject = subscribeToProject();
 
     return () => {
-      unsubscribe();
+      unsubscribeProject();
     };
+  }, [project.projectId]);
+
+  const fetchTasksData = async () => {
+    try {
+      const tasksQuery = query(collection(FIREBASE_DB, 'tasks'), where('projectId', '==', project.projectId));
+      const snapshot = await getDocs(tasksQuery);
+      const tasksData: Task[] = [];
+      for (const doc of snapshot.docs) {
+        const data = doc.data();
+        const isChecked = data.isChecked || false;
+        // Ensure createdAt is present, otherwise use a fallback Timestamp
+        const createdAt = data.createdAt ?? Timestamp.now();
+        tasksData.push({
+          id: doc.id,
+          taskDetails: data.taskDetails,
+          deadline: data.deadline,
+          projectId: data.projectId,
+          isChecked: isChecked,
+          createdAt: createdAt
+        });
+      }
+      setTasks(tasksData);
+    } catch (error) {
+      console.error("Error fetching tasks:", error);
+    }
+  };
+
+  const handleTaskCheck = async (taskId: string) => {
+    try {
+      // Fetch the task document from Firebase
+      const taskDocRef = doc(FIREBASE_DB, 'tasks', taskId);
+      const taskSnapshot = await getDoc(taskDocRef);
+
+      if (taskSnapshot.exists()) {
+        const taskData = taskSnapshot.data();
+
+        // Calculate the new checked state
+        const newCheckedState = !taskData.isChecked;
+
+        // Update the task document in Firebase
+        await updateDoc(taskDocRef, { isChecked: newCheckedState });
+
+        fetchTasksData(); // Fetch tasks again after checking
+      }
+    } catch (error) {
+      console.error('Failed to save checkbox state:', error);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await deleteDoc(doc(FIREBASE_DB, 'tasks', taskId));
+      fetchTasksData(); // Fetch tasks again after deletion
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchTasksData();
+  }, []);
+
+  useEffect(() => {
+    // Listen for real-time updates on tasks and re-sort them
+    const tasksQuery = query(collection(FIREBASE_DB, 'tasks'), where('projectId', '==', project.projectId));
+    const unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
+      const tasksData: Task[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const isChecked = data.isChecked || false;
+        // Ensure createdAt is present, otherwise use a fallback Timestamp
+        const createdAt = data.createdAt ?? Timestamp.now();
+        tasksData.push({
+          id: doc.id,
+          taskDetails: data.taskDetails,
+          deadline: data.deadline,
+          projectId: data.projectId,
+          isChecked: isChecked,
+          createdAt: createdAt
+        });
+      });
+      setTasks(tasksData);
+    });
+
+    // Don't use unsubscribeTasks, no need to clean up.
   }, [project.projectId]);
 
   const handleSaveEdits = async () => {
     const projectDocRef = doc(FIREBASE_DB, 'project', project.projectId);
-    console.log('Saving Start Date:', newProjectStartDate);
-    console.log('Saving End Date:', newProjectEndDate);
 
     try {
       await updateDoc(projectDocRef, {
@@ -161,13 +245,12 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
         priority: newPriority,
       });
 
-      // Fetch the updated project data to verify the changes
       const updatedDocSnapshot = await getDoc(projectDocRef);
       if (updatedDocSnapshot.exists()) {
         const updatedProjectData = updatedDocSnapshot.data() as ProjectData;
         setProjectData({
           ...updatedProjectData,
-          assignedMembers: projectData.assignedMembers, // Preserve existing assigned members
+          assignedMembers: projectData.assignedMembers,
         });
       }
 
@@ -203,15 +286,16 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
       };
 
       if (taskDeadline) {
-        taskData.deadline = Timestamp.fromDate(new Date(taskDeadline)); // Add deadline if it's provided
+        taskData.deadline = Timestamp.fromDate(new Date(taskDeadline));
       }
 
       await addDoc(collection(FIREBASE_DB, 'tasks'), taskData);
 
       setTaskDetails('');
       setTaskDeadline('');
-      setSelectedDate(new Date());  // Reset selected date
+      setSelectedDate(new Date());
       setIsAddingTask(false);
+      fetchTasksData(); // Fetch tasks again after adding a new task
     } catch (error) {
       console.error('Error adding task:', error);
     }
@@ -221,119 +305,143 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
     setIsAddingTask(false);
     setTaskDetails('');
     setTaskDeadline('');
-    setSelectedDate(new Date());  // Reset selected date
-  };
-
-  const handleDeleteTask = async (taskId: string) => {
-    try {
-      await deleteDoc(doc(FIREBASE_DB, 'tasks', taskId));
-    } catch (error) {
-      console.error('Error deleting task:', error);
-    }
+    setSelectedDate(new Date());
   };
 
   const handleAddMember = async () => {
     try {
-      const normalizedEmail = newMemberEmail.toLowerCase(); // Convert email to lowercase
+      const normalizedEmail = newMemberEmail.toLowerCase().trim();
+
+      if (!normalizedEmail) {
+        Alert.alert("Please enter an email.");
+        return;
+      }
+
       const isEmailAlreadyAdded = projectData.assignedMembers.some(member => member.email.toLowerCase() === normalizedEmail);
-  
       if (isEmailAlreadyAdded) {
         Alert.alert("This email is already added.");
         return;
       }
-  
+
       const q = query(collection(FIREBASE_DB, 'users'), where('email', '==', normalizedEmail));
       const querySnapshot = await getDocs(q);
-  
+
       if (!querySnapshot.empty) {
         const userDoc = querySnapshot.docs[0];
         const userData = userDoc.data();
-        const userName = userData.name || ''; // Assuming 'name' field exists in user document
-        const newMember: AssignedMember = {
-          memberId: userDoc.id,
-          name: userName,
-          email: normalizedEmail,
-          profilePhoto: userData.profilePhoto || '', // Assuming 'profilePhoto' field exists
-        };
-  
-        // Update the Firestore document to add the new member
+        const userId = userDoc.id;
+
         const projectDocRef = doc(FIREBASE_DB, 'project', project.projectId);
         await updateDoc(projectDocRef, {
-          assignedMembers: arrayUnion(newMember),
+          assignedMembers: arrayUnion(userId),
         });
-  
-        // Update local state
+
+        const newMember: AssignedMember = {
+          memberId: userId,
+          name: userData.name || '',
+          email: normalizedEmail,
+          profilePhoto: userData.profilePhoto || '',
+        };
+
         setProjectData((prevData) => ({
           ...prevData,
           assignedMembers: [...prevData.assignedMembers, newMember],
         }));
-  
+
         setNewMemberEmail('');
         Alert.alert('Member added successfully');
       } else {
         Alert.alert('Email does not exist');
       }
     } catch (error) {
+      console.error('Error checking email:', error);
       Alert.alert('Error checking email:', error.message);
     }
   };
-  
-  
 
   const handleRemoveMember = async (memberId: string) => {
-  const projectDocRef = doc(FIREBASE_DB, 'project', project.projectId);
+    const projectDocRef = doc(FIREBASE_DB, 'project', project.projectId);
 
-  // Find the member object to remove
-  const memberToRemove = projectData.assignedMembers.find(member => member.memberId === memberId);
-  
-  if (!memberToRemove) {
-    console.error('Member not found');
-    return;
-  }
+    const memberToRemove = projectData.assignedMembers.find(member => member.memberId === memberId);
 
-  try {
-    // Update the Firestore document to remove the member by their object
-    await updateDoc(projectDocRef, {
-      assignedMembers: arrayRemove(memberToRemove),
-    });
+    if (!memberToRemove) {
+      console.error('Member not found');
+      return;
+    }
 
-    // Update local state
-    setProjectData((prevData) => ({
-      ...prevData,
-      assignedMembers: prevData.assignedMembers.filter(member => member.memberId !== memberId),
-    }));
+    try {
+      await updateDoc(projectDocRef, {
+        assignedMembers: arrayRemove(memberToRemove),
+      });
 
-    console.log('Member removed successfully');
-  } catch (error) {
-    console.error('Error removing member:', error);
-  }
-};
+      setProjectData((prevData) => ({
+        ...prevData,
+        assignedMembers: prevData.assignedMembers.filter(member => member.memberId !== memberId),
+      }));
 
-  
+    } catch (error) {
+      console.error('Error removing member:', error);
+    }
+  };
 
   const getPriorityColor = (priority: string): string => {
     switch (priority.toLowerCase()) {
       case 'high':
-        return '#FF6347'; // Red color for High priority
+        return '#FF6347';
       case 'medium':
-        return '#FFC047'; // Yellow color for Medium priority
+        return '#FFC047';
       case 'low':
-        return '#62CF2F'; // Green color for Low priority
+        return '#62CF2F';
       default:
-        return '#C5C2FF'; // Default color
+        return '#C5C2FF';
     }
   };
 
   const getPriorityContainerWidth = (priority: string): number => {
-    const textLength = priority.length * 10.8; // Assuming 10.8 is the average width of a character
-    const minWidth = 30; // Minimum width
-    return textLength + 20; // Adding some extra padding for better visibility
+    const textLength = priority.length * 10.8;
+    const minWidth = 30;
+    return textLength + 20;
   };
 
   const handleChangePriority = (newPriority: string) => {
     setNewPriority(newPriority);
     setPriorityModalVisible(false);
   };
+
+  // Remove Project Function
+
+  const handleProjectDelete = async () => {
+    try {
+      const projectDocRef = doc(FIREBASE_DB, 'project', project.projectId);
+  
+      // Fetch all tasks associated with the project
+      const tasksQuery = query(collection(FIREBASE_DB, 'tasks'), where('projectId', '==', project.projectId));
+      const tasksSnapshot = await getDocs(tasksQuery);
+  
+      // Delete each task associated with the project
+      const deleteTasksPromises = tasksSnapshot.docs.map((taskDoc) => deleteDoc(taskDoc.ref));
+      await Promise.all(deleteTasksPromises);
+  
+      // Delete the project document
+      await deleteDoc(projectDocRef);
+  
+      // Update the project data in real-time by setting it to initial state
+      setProjectData({
+        projectName: '',
+        projectDescription: '',
+        startDate: new Timestamp(0, 0),
+        endDate: new Timestamp(0, 0),
+        priority: '',
+        assignedMembers: [],
+        creatorId: '',
+      });
+  
+      navigation.goBack();
+    } catch (error) {
+      console.error('Error deleting project:', error);
+    }
+  };
+  
 
   return (
     <View style={styles.container}>
@@ -350,9 +458,14 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
                   <FontAwesome name="pencil-square" size={22} color="#0d0d0d" />
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={styles.editButton} onPress={handleSaveEdits}>
-                  <FontAwesome name="save" size={22} color="#0d0d0d" />
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity style={styles.editButton} onPress={handleSaveEdits}>
+                    <FontAwesome name="save" size={22} color="#0d0d0d" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.deleteButton} onPress={handleProjectDelete}>
+                    <FontAwesome name="trash" size={24} color="red" />
+                  </TouchableOpacity>
+                </>
               )}
             </>
           )}
@@ -364,7 +477,6 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
         </View>
 
         <View style={styles.projectTitleContainer}>
-          {/* <Text style={styles.projectTitle}>Project Title</Text> */}
         </View>
         <View style={styles.mid}>
           {editing ? (
@@ -391,7 +503,6 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
                 onChange={(event, date) => {
                   if (date) {
                     setNewProjectStartDate(date);
-                    console.log('Start Date Changed:', date.toISOString());
                   }
                 }}
               />
@@ -402,7 +513,6 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
                 onChange={(event, date) => {
                   if (date) {
                     setNewProjectEndDate(date);
-                    console.log('End Date Changed:', date.toISOString());
                   }
                 }}
               />
@@ -487,6 +597,9 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
             taskDetails={item.taskDetails}
             deadline={item.deadline}
             onDelete={handleDeleteTask}
+            isChecked={item.isChecked}
+            onCheck={() => handleTaskCheck(item.id)}
+            projectTitle={projectData.projectName} // Pass project title
           />
         )}
         renderHiddenItem={({ item }) => (
@@ -495,12 +608,14 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
               style={[styles.deleteButtonContainer]}
               onPress={() => handleDeleteTask(item.id)}
             >
-              <Text style={styles.backTextWhite}>Delete</Text>
+              <FontAwesome style={styles.deleteButton} name='trash' color={'#fff'} size={24} />
             </TouchableOpacity>
           </View>
         )}
         rightOpenValue={-75}
       />
+
+      {/* Adding a task modal */}
 
       <Modal visible={isAddingTask} animationType="slide">
         <View style={styles.modalContainer}>
@@ -531,6 +646,8 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
           </TouchableOpacity>
         </View>
       </Modal>
+
+      {/* Changing Priority Modal */}
 
       <Modal visible={priorityModalVisible} animationType="slide" transparent={true}>
         <View style={styles.priorityModalContainer}>
@@ -577,6 +694,7 @@ const styles = StyleSheet.create({
     height: 300,
     paddingHorizontal: 40,
     backgroundColor: '#F5FFDF',
+    borderRadius: 45,
   },
   top: {
     flexDirection: 'row',
@@ -652,7 +770,7 @@ const styles = StyleSheet.create({
     padding: 4,
     marginRight: 100,
     borderRadius: 45,
-    borderWidth: 1.5, 
+    borderWidth: 1.5,
   },
   assignedMembers: {
     alignItems: 'center',
@@ -690,9 +808,9 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 20,
   },
-  scrollViewContent: {
-    paddingBottom: 100,
-  },
+  // scrollViewContent: {
+  //   paddingBottom: 100,
+  // },
   midContainer: {
     flexDirection: 'column',
     height: 200,
@@ -747,32 +865,34 @@ const styles = StyleSheet.create({
   },
   taskAddButton: {},
 
-  //Swipe List View Styles
-  
+  // Swipe List View Styles
+
   rowBack: {
     alignItems: 'center',
-    backgroundColor: '#DD2C00', //red
+    backgroundColor: '#DD2C00',
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'flex-end',
     paddingRight: 15,
-    margin: 5,
-    borderRadius: 10,
-    width: '80%',
+    margin: 10,
+    borderRadius: 25,
+    width: '90%',
     alignSelf: 'center',
-    height: 60,
-
   },
 
   deleteButtonContainer: {
-    // right: 0,
+    right: 10,
   },
 
   backTextWhite: {
     color: '#FFF',
   },
 
-  //Add Task Modal Styles
+  deleteButton: {
+    alignSelf: 'center',
+  },
+
+  // Add Task Modal Styles
 
   modalContainer: {
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -814,10 +934,9 @@ const styles = StyleSheet.create({
   priorityModalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    
   },
 
-  priorityOptionsContainer:{
+  priorityOptionsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 10,
@@ -872,6 +991,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+  },
+
+  // Project Delete Button
+
+  projectDeleteButton: {
+    marginLeft: 10,
   },
 });
 

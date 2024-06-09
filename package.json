@@ -26,6 +26,7 @@
     "expo-image-picker": "~15.0.5",
     "expo-status-bar": "^1.12.1",
     "firebase": "^10.9.0",
+    "lodash": "^4.17.21",
     "react": "18.2.0",
     "react-native": "^0.74.1",
     "react-native-calendar-strip": "^1.4.2",

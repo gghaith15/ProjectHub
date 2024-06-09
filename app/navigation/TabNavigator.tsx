@@ -4,7 +4,7 @@ import { NavigationProp } from '@react-navigation/native';
 import Projects from "../tabScreens/Projects";
 import Tasks from "../tabScreens/Tasks";
 import AddNew from "../tabScreens/AddNew";
-import { StyleSheet } from "react-native";
+import { StyleSheet, Image } from "react-native";
 import { FontAwesome } from '@expo/vector-icons';
 import Home from "../tabScreens/Home";
 
@@ -74,6 +74,8 @@ const TabNavigator = ({ navigation }: RouterProps) => {
               size={25}
               color={color}
             />
+            // <Image source={require('../assets/tasks2.png')} style={styles.image} />
+
           ),
         }}
       />
@@ -120,6 +122,10 @@ const styles = StyleSheet.create({
     
     // Elevation for Android
     elevation: 10, 
+  },
+
+  image: {
+    
   },
 
 });

@@ -1,22 +1,20 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
-import { SwipeListView } from 'react-native-swipe-list-view';
+import { Timestamp } from 'firebase/firestore';
 
-interface Task {
+interface TaskProps {
   id: string;
   taskDetails: string;
-  deadline: string;
+  deadline: Timestamp;
+  isChecked: boolean;
   onDelete: (id: string) => void;
+  onCheck: (id: string) => void;
+  projectTitle: string;
 }
 
-const TaskComponent: React.FC<Task> = ({ id, taskDetails, deadline, onDelete }) => {
-  const [isChecked, setIsChecked] = useState(false);
+const TaskComponent: React.FC<TaskProps> = ({ id, taskDetails, deadline, isChecked, onDelete, onCheck, projectTitle }) => {
   const [modalVisible, setModalVisible] = useState(false);
-
-  const handlePress = () => {
-    setIsChecked(!isChecked);
-  };
 
   const handleOpenTask = () => {
     setModalVisible(true);
@@ -33,6 +31,8 @@ const TaskComponent: React.FC<Task> = ({ id, taskDetails, deadline, onDelete }) 
     return text;
   };
 
+  const formattedDeadline = deadline ? deadline.toDate().toLocaleDateString('en-US', { month: 'short', day: '2-digit' }) : 'No deadline';
+
   return (
     <>
       <View style={styles.rowFront}>
@@ -40,9 +40,9 @@ const TaskComponent: React.FC<Task> = ({ id, taskDetails, deadline, onDelete }) 
           <View style={styles.container}>
             <View style={styles.textContainer}>
               <Text style={styles.taskDetails}>{truncateText(taskDetails, 35)}</Text>
-              <Text style={styles.deadline}>{deadline}</Text>
+              <Text style={styles.deadline}>{formattedDeadline}</Text>
             </View>
-            <TouchableOpacity style={[styles.checkBox, isChecked && styles.checkedBox]} onPress={handlePress}>
+            <TouchableOpacity style={[styles.checkBox, isChecked && styles.checkedBox]} onPress={() => onCheck(id)}>
               {isChecked && (
                 <FontAwesome name='check' />
               )}
@@ -59,6 +59,7 @@ const TaskComponent: React.FC<Task> = ({ id, taskDetails, deadline, onDelete }) 
           <Text style={styles.backTextWhite}>Delete</Text>
         </TouchableOpacity>
       </View>
+
       <Modal
         animationType="slide"
         transparent={true}
@@ -67,8 +68,9 @@ const TaskComponent: React.FC<Task> = ({ id, taskDetails, deadline, onDelete }) 
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
+            <Text>{projectTitle}</Text>
             <Text style={styles.modalTaskDetails}>{taskDetails}</Text>
-            <Text style={styles.modalDeadline}>{deadline}</Text>
+            <Text style={styles.modalDeadline}>{formattedDeadline}</Text>
             <TouchableOpacity onPress={handleCloseTask} style={styles.closeButton}>
               <Text style={styles.closeButtonText}>Close</Text>
             </TouchableOpacity>
@@ -86,9 +88,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     alignSelf: 'center',
-    width: '80%',
-    height: 60,
-    borderRadius: 10,
+    width: '90%',
+    height: 70,
+    borderRadius: 25,
     padding: 10,
     margin: 5,
   },
@@ -106,15 +108,15 @@ const styles = StyleSheet.create({
     color: '#ccc',
   },
   checkBox: {
-    width: 25,
-    height: 25,
+    width: 28,
+    height: 28,
     borderWidth: 1,
     borderColor: '#fff',
-    borderRadius: 5,
+    borderRadius: 14,
   },
   checkedBox: {
-    width: 25,
-    height: 25,
+    width: 28,
+    height: 28,
     backgroundColor: '#C9EF76',
     justifyContent: 'center',
     alignItems: 'center',
@@ -136,35 +138,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-
   modalDeadline: {
     fontSize: 16,
     color: '#888',
     marginTop: 10,
   },
-
   closeButton: {
     marginTop: 20,
     padding: 10,
     backgroundColor: '#2196F3',
     borderRadius: 5,
   },
-
   closeButtonText: {
     color: '#fff',
     fontWeight: 'bold',
   },
-
-  //Swipe List View Styles
-
   rowFront: {
     height: 60,
     width: "100%",
     borderRadius: 10,
-    margin: 10,
-
+    marginTop: 5,
   },
-
   rowBack: {
     alignItems: 'center',
     backgroundColor: '#DDD',
@@ -172,10 +166,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingLeft: 15,
-    margin: 5,
+    marginTop: 20,
     borderRadius: 10,
   },
-
   deleteButtonContainer: {
     alignItems: 'center',
     bottom: 0,
@@ -185,11 +178,9 @@ const styles = StyleSheet.create({
     width: 75,
     borderRadius: 10,
   },
-
   backTextWhite: {
     color: '#FFF',
   },
-  
 });
 
 export default TaskComponent;

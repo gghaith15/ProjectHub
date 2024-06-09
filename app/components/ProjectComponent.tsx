@@ -38,13 +38,20 @@ const ProjectComponent: React.FC<ProjectComponentProps> = ({ projectId, projectN
     const formattedDate = new Date(date.seconds * 1000);
     return formattedDate.toLocaleDateString();
   };
-  console.log("assignedMembers", assignedMembers);
+  // console.log("assignedMembers", assignedMembers);
 
   const truncateDescription = (description: string, maxLength: number): string => {
     if (description.length > maxLength) {
       return `${description.substring(0, maxLength)}...`;
     }
     return description;
+  };
+
+  const truncateTitle = (Title: string, maxLength: number): string => {
+    if (Title.length > maxLength) {
+      return `${Title.substring(0, maxLength)}...`;
+    }
+    return Title;
   };
 
   const getRandomColor = (): string => {
@@ -91,7 +98,8 @@ const ProjectComponent: React.FC<ProjectComponentProps> = ({ projectId, projectN
   return (
     <TouchableOpacity onPress={handlePress}>
       <View style={[styles.container, { backgroundColor }]}>
-        <Text style={styles.title}>{projectName ?? "no title"}</Text>
+        <Text style={styles.title}>{truncateTitle(projectName ?? "no title", 29)}</Text>
+
 
         <View style={styles.DateContainer}>
           <Text>{startDate?.toDate().toLocaleDateString('en-US', { month: 'short', day: '2-digit' }) || "no date"}</Text>

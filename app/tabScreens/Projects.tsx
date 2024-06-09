@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Button } from 'react-native';
 import ProjectComponent from '../components/ProjectComponent';
 import { NavigationProp } from '@react-navigation/native';
-import { DocumentReference, collection, doc, getDoc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
+import { Timestamp, collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { FIREBASE_DB, auth } from '../../FirebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -11,8 +11,10 @@ interface RouterProps {
 }
 
 interface AssignedMember {
+  id: string;
   name: string;
-  initial: string;
+  email: string;
+  profilePhoto?: string;
 }
 
 interface ProjectData {
@@ -24,12 +26,14 @@ interface ProjectData {
   priority: string;
   assignedMembers: AssignedMember[];
   creatorId: any;
+  createdAt: any;  // Add createdAt property
 }
 
 interface UserData {
   id: string;
   name: string;
   email: string;
+  profilePhoto?: string;
 }
 
 const Projects = ({ navigation }: RouterProps) => {
@@ -57,6 +61,21 @@ const Projects = ({ navigation }: RouterProps) => {
           data.assignedMembers.forEach((memberId: string) => {
             userIds.add(memberId);
           });
+
+          // Ensure createdAt is present, otherwise use a fallback Timestamp
+          const createdAt = data.createdAt ?? Timestamp.now();
+
+          projectsData.push({
+            id: doc.id,
+            projectName: data.projectName,
+            projectDescription: data.projectDescription,
+            startDate: data.startDate,
+            endDate: data.endDate,
+            priority: data.priority,
+            assignedMembers: data.assignedMembers,
+            creatorId: data.creatorId,
+            createdAt: createdAt  // Add createdAt property
+          });
         });
       };
 
@@ -70,38 +89,26 @@ const Projects = ({ navigation }: RouterProps) => {
         if (userDoc.exists()) {
           const userData = userDoc.data() as UserData;
           usersMap[userDoc.id] = { id: userDoc.id, ...userData };
-        } else {
-          console.log(`User document with ID ${userDoc} does not exist`);
         }
       });
 
-      const populateProjectsData = (snapshot: any) => {
-        snapshot.forEach((doc: any) => {
-          const data = doc.data();
-          const assignedMembersDetailed = data.assignedMembers.map((memberId: string) => {
-            return usersMap[memberId] || { id: memberId, name: 'Unknown', email: 'Unknown' };
-          });
-
-          projectsData.push({
-            id: doc.id,
-            projectName: data.projectName,
-            projectDescription: data.projectDescription,
-            startDate: data.startDate,
-            endDate: data.endDate,
-            priority: data.priority,
-            assignedMembers: assignedMembersDetailed,
-            creatorId: data.creatorId,
-          });
+      // Add detailed assigned members to the projects
+      projectsData.forEach(project => {
+        project.assignedMembers = project.assignedMembers.map((memberId: any) => {
+          const user = usersMap[memberId];
+          return {
+            id: memberId,
+            name: user ? user.name : 'Unknown',
+            email: user ? user.email : 'Unknown',
+            profilePhoto: user ? user.profilePhoto : undefined
+          };
         });
-      };
-
-      populateProjectsData(createdSnapshot);
-      populateProjectsData(assignedSnapshot);
+      });
 
       // Sort projects based on the selected criteria
       let sortedProjects = [...projectsData];
       if (selectedSortCriteria === 'recentlyAdded') {
-        sortedProjects = sortedProjects.sort((a, b) => b.startDate.seconds - a.startDate.seconds);
+        sortedProjects = sortedProjects.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
       } else if (selectedSortCriteria === 'highToLow') {
         sortedProjects = sortedProjects.sort((a, b) => {
           const priorityOrder = ['High', 'Medium', 'Low'];
@@ -128,7 +135,6 @@ const Projects = ({ navigation }: RouterProps) => {
 
         if (userDoc.exists()) {
           const data = userDoc.data();
-          console.log("User data:", data);
           fetchProjects(uid);
         }
       } catch (error) {

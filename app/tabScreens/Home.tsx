@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { NavigationProp } from '@react-navigation/native';
 import { FontAwesome } from '@expo/vector-icons';
 import ProjectComponent from '../components/ProjectComponent';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import TaskComponent from '../components/TaskComponent';
+import { Timestamp, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { FIREBASE_DB, auth } from '../../FirebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
-import { Picker } from '@react-native-picker/picker';
+import { SwipeListView } from 'react-native-swipe-list-view';
 
 interface RouterProps {
   navigation: NavigationProp<any, any>;
@@ -16,7 +17,7 @@ interface AssignedMember {
   id: string;
   name: string;
   email: string;
-  profilePhoto?: string; // Add profilePhoto property
+  profilePhoto?: string;
 }
 
 interface ProjectData {
@@ -32,13 +33,23 @@ interface ProjectData {
 
 interface UserData extends AssignedMember {}
 
+interface Task {
+  id: string;
+  taskDetails: string;
+  deadline: Timestamp;
+  projectId: string;
+  isChecked: boolean;
+  createdAt: Timestamp;
+}
+
 const Home = ({ navigation }: RouterProps) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [projects, setProjects] = useState<ProjectData[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [userName, setUserName] = useState('');
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
-  const [sortCriteria, setSortCriteria] = useState<'recentlyAdded' | 'highToLow' | 'lowToHigh'>('recentlyAdded');
   const [userId, setUserId] = useState<string | null>(null);
+  const [projectTitles, setProjectTitles] = useState<{ [key: string]: string }>({});
 
   const toggleModal = () => {
     setModalVisible(!modalVisible);
@@ -56,6 +67,7 @@ const Home = ({ navigation }: RouterProps) => {
       
       const projectsData: ProjectData[] = [];
       const userIds = new Set<string>();
+      const titles: { [key: string]: string } = {};
       
       const processSnapshot = (snapshot: any) => {
         snapshot.forEach((doc: any) => {
@@ -63,29 +75,22 @@ const Home = ({ navigation }: RouterProps) => {
           data.assignedMembers.forEach((memberId: string) => {
             userIds.add(memberId);
           });
+          titles[doc.id] = data.projectName;
         });
       };
       
       processSnapshot(createdSnapshot);
       processSnapshot(assignedSnapshot);
       
-      console.log("befropre");
-      console.log(userIds);
-      
       const userDocs = await Promise.all(Array.from(userIds).map(userId => getDoc(doc(FIREBASE_DB, 'users', userId))));
-      console.log("after");
       const usersMap: { [key: string]: UserData } = {};
 
       userDocs.forEach(userDoc => {
         if (userDoc.exists()) {
           const userData = userDoc.data() as UserData;
           usersMap[userDoc.id] = { id: userDoc.id, ...userData };
-        } else {
-          // console.log(`User document with ID ${userDoc.id} does not exist`);
         }
       });
-      console.log("userDocs",userDocs);
-      console.log("usersMap",usersMap);
 
       const populateProjectsData = (snapshot: any) => {
         snapshot.forEach((doc: any) => {
@@ -106,11 +111,11 @@ const Home = ({ navigation }: RouterProps) => {
           });
         });
       };
-      console.log("projectsData",projectsData);
-      
+
       populateProjectsData(createdSnapshot);
       populateProjectsData(assignedSnapshot);
 
+      setProjectTitles(titles);
       return projectsData;
     } catch (error) {
       console.error("Error fetching projects:", error);
@@ -118,28 +123,106 @@ const Home = ({ navigation }: RouterProps) => {
     }
   };
 
+  const fetchTasks = async (projectIds: string[]) => {
+    try {
+      const tasksData: Task[] = [];
+
+      for (const projectId of projectIds) {
+        const tasksQuery = query(collection(FIREBASE_DB, 'tasks'), where('projectId', '==', projectId));
+        const tasksSnapshot = await getDocs(tasksQuery);
+
+        for (const doc of tasksSnapshot.docs) {
+          const taskData = doc.data() as Omit<Task, 'id'>;
+          const isChecked = taskData.isChecked || false;
+
+          // Ensure createdAt is present, otherwise use a fallback Timestamp
+          const createdAt = taskData.createdAt ?? Timestamp.now();
+
+          tasksData.push({ id: doc.id, ...taskData, isChecked, createdAt });
+        }
+      }
+
+      // Sort tasks by createdAt timestamp in descending order (recently added first)
+      // tasksData.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+
+      setTasks(tasksData);
+    } catch (error) {
+      console.error("Error fetching tasks:", error);
+    }
+  };
+
+  const handleTaskDelete = async (taskId: string) => {
+    try {
+      await deleteDoc(doc(FIREBASE_DB, 'tasks', taskId));
+      fetchTasksData(); // Fetch tasks again after deletion
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
+  };
+
+  const handleTaskCheck = async (taskId: string) => {
+    try {
+      // Fetch the task document from Firebase
+      const taskDocRef = doc(FIREBASE_DB, 'tasks', taskId);
+      const taskSnapshot = await getDoc(taskDocRef);
+  
+      if (taskSnapshot.exists()) {
+        const taskData = taskSnapshot.data();
+  
+        // Calculate the new checked state
+        const newCheckedState = !taskData.isChecked;
+  
+        // Update the task document in Firebase
+        await updateDoc(taskDocRef, { isChecked: newCheckedState });
+
+        fetchTasksData(); // Fetch tasks again after checking
+      }
+    } catch (error) {
+      console.error('Failed to save checkbox state:', error);
+    }
+  };
+
+  const fetchTasksData = async () => {
+    const tasksQuery = query(collection(FIREBASE_DB, 'tasks'));
+    const snapshot = await getDocs(tasksQuery);
+    const tasksData: Task[] = [];
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const isChecked = data.isChecked || false;
+      // Ensure createdAt is present, otherwise use a fallback Timestamp
+      const createdAt = data.createdAt ?? Timestamp.now();
+      tasksData.push({
+        id: doc.id,
+        taskDetails: data.taskDetails,
+        deadline: data.deadline,
+        projectId: data.projectId,
+        isChecked: isChecked,
+        createdAt: createdAt
+      });
+    }
+    setTasks(tasksData);
+  };
+
   useEffect(() => {
     const fetchUserData = async (uid: string) => {
       try {
-        // Fetch all documents in the users collection
         const userRef = doc(collection(FIREBASE_DB, "users"), uid);
         const userDoc = await getDoc(userRef);
-
         if (userDoc.exists()) {
           const data = userDoc.data();
-          console.log("User data:", data);
           setUserName(data.name || '');
-          setProfilePicture(data.profilePhoto || null); // Set profile picture URL
+          setProfilePicture(data.profilePhoto || null);
           const fetchedProjects = await fetchProjects(uid);
-
           setProjects(fetchedProjects);
+          const projectIds = fetchedProjects.map(project => project.id);
+          await fetchTasks(projectIds);
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
       }
     };
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, (user) => {
       if (user) {
         setUserId(user.uid);
         fetchUserData(user.uid);
@@ -147,13 +230,38 @@ const Home = ({ navigation }: RouterProps) => {
         console.error("No user is logged in");
       }
     });
+  }, []);
 
-    return () => unsubscribe();
-  }, [sortCriteria]);
+  useEffect(() => {
+    fetchTasksData();
+  }, []);
 
-  const handleSortChange = (criteria: 'recentlyAdded' | 'highToLow' | 'lowToHigh') => {
-    setSortCriteria(criteria);
-  };
+  useEffect(() => {
+    // Listen for real-time updates on tasks and re-sort them
+    const tasksQuery = query(collection(FIREBASE_DB, 'tasks'));
+    const unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
+      const tasksData: Task[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const isChecked = data.isChecked || false;
+        // Ensure createdAt is present, otherwise use a fallback Timestamp
+        const createdAt = data.createdAt ?? Timestamp.now();
+        tasksData.push({
+          id: doc.id,
+          taskDetails: data.taskDetails,
+          deadline: data.deadline,
+          projectId: data.projectId,
+          isChecked: isChecked,
+          createdAt: createdAt
+        });
+      });
+      // Sort tasks by createdAt timestamp in descending order (recently added first)
+      // tasksData.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+      setTasks(tasksData);
+    });
+
+    // Don't use unsubscribeTasks, no need to clean up.
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -161,7 +269,7 @@ const Home = ({ navigation }: RouterProps) => {
         <Text style={styles.welcomeText}>Welcome{'\n'}{userName ? userName : 'User'} &#x1F44B;</Text>
         <View style={styles.iconContainer}>
           <TouchableOpacity style={styles.settingsIcon} onPress={toggleModal}>
-            <FontAwesome name="th-large" size={24} color="black" />
+            <FontAwesome name="gear" size={24} color="black" />
           </TouchableOpacity>
           <View>
             <TouchableOpacity style={styles.profileIcon} onPress={() => navigation.navigate('Profile')}>
@@ -174,16 +282,6 @@ const Home = ({ navigation }: RouterProps) => {
           </View>
         </View>
       </View>
-
-      <Picker
-        selectedValue={sortCriteria}
-        style={styles.picker}
-        onValueChange={(itemValue) => handleSortChange(itemValue)}
-      >
-        <Picker.Item label="Recently Added" value="recentlyAdded" />
-        <Picker.Item label="High to Low Priority" value="highToLow" />
-        <Picker.Item label="Low to High Priority" value="lowToHigh" />
-      </Picker>
 
       <ScrollView
         horizontal
@@ -210,29 +308,60 @@ const Home = ({ navigation }: RouterProps) => {
         </View>
       </ScrollView>
 
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={toggleModal}
-      >
-        <Pressable style={styles.centeredView} onPress={toggleModal}>
-          <View style={styles.modalView}>
-            <TouchableOpacity style={styles.button} onPress={() => { navigation.navigate('Projects'); toggleModal(); }}>
-              <Text style={styles.buttonText}>Projects</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.button} onPress={() => { navigation.navigate('Tasks'); toggleModal(); }}>
-              <Text style={styles.buttonText}>Tasks</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.button} onPress={() => { navigation.navigate('Settings'); toggleModal(); }}>
-              <Text style={styles.buttonText}>Settings</Text>
-            </TouchableOpacity>
-            <Pressable style={styles.downIcon} onPress={toggleModal}>
-              <FontAwesome name="arrow-down" size={24} color="#C9EF76" />
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+      <View style={styles.TaskHeaderContainer}>
+        <Text style={styles.TaskHeaderText}>Your Tasks</Text>
+
+        <TouchableOpacity style={styles.ShowAllButton} onPress={() => navigation.navigate('Tasks')}>
+          <Text style={styles.showAllText}>Show All</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.tasksContainer}>
+
+        {/* <ScrollView>
+        {tasks.length > 0 ? tasks.map((task) => (
+          <TaskComponent
+            key={task.id}
+            id={task.id}
+            taskDetails={task.taskDetails}
+            deadline={task.deadline}
+            onDelete={handleTaskDelete}
+            isChecked={task.isChecked}
+            onCheck={handleTaskCheck}
+            projectTitle={projectTitles[task.projectId]}
+          />
+        )) : (
+          <Text style={{ color: 'white' }}>No tasks available</Text>
+        )}
+        </ScrollView> */}
+
+        <SwipeListView
+          data={tasks}
+          renderItem={({ item }) => (
+            <TaskComponent
+              id={item.id}
+              taskDetails={item.taskDetails}
+              deadline={item.deadline}
+              onDelete={handleTaskDelete}
+              isChecked={item.isChecked}
+              onCheck={() => handleTaskCheck(item.id)}
+              projectTitle={projectTitles[item.projectId]}
+            />
+          )}
+          renderHiddenItem={({ item }) => (
+            <View style={styles.rowBack}>
+              <TouchableOpacity
+                style={[styles.deleteButtonContainer]}
+                onPress={() => handleTaskDelete(item.id)}
+              >
+                <FontAwesome style={styles.deleteButton} name="trash" color={'#fff'} size={24} />
+              </TouchableOpacity>
+            </View>
+          )}
+          rightOpenValue={-75}
+        />
+
+      </View>
     </View>
   );
 };
@@ -280,55 +409,60 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
   },
-  picker: {
-    height: 50,
-    width: 250,
+  TaskHeaderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: 40,
+    marginTop: 20,
+  },
+  TaskHeaderText: {
     color: 'white',
-    marginVertical: 10,
+    fontSize: 18,
+    fontWeight: '600',
   },
-  centeredView: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    marginTop: 22,
-    flexDirection: 'column',
-  },
-  modalView: {
-    backgroundColor: '#F2F2F2',
-    borderRadius: 20,
-    width: "100%",
-    height: "65%",
-    padding: 35,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  button: {
-    width: 200,
-    height: 40,
+  ShowAllButton: {
+    padding: 5,
     backgroundColor: '#C9EF76',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
     borderRadius: 5,
-    marginBottom: 5,
-    marginTop: 30,
   },
-  buttonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
+  showAllText: {
+    color: '#0d0d0d',
+    fontSize: 14,
+    fontWeight: '600',
   },
-  downIcon: {
-    position: 'absolute',
-    top: 10,
-    padding: 15,
+  tasksContainer: {
+    marginBottom: 95,
+    borderRadius: 25,
+    height: 375,
+    padding: 20,
+  },
+
+  //Swipe List View Styles
+  
+  rowBack: {
+    alignItems: 'center',
+    backgroundColor: '#DD2C00',
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingRight: 15,
+    margin: 10,
+    borderRadius: 25,
+    width: '90%',
+    alignSelf: 'center',
+  },
+
+  deleteButtonContainer: {
+    right: 10,
+  },
+
+  backTextWhite: {
+    color: '#FFF',
+  },
+
+  deleteButton: {
+    alignSelf: 'center',
   },
 });
 
