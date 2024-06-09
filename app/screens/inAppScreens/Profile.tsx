@@ -7,14 +7,14 @@ import { FIREBASE_DB, auth } from '../../../FirebaseConfig';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { FontAwesome } from '@expo/vector-icons';
-import { signOut, updateEmail, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 
 interface RouterProps {
     navigation: NavigationProp<any, any>;
 }
 
 const Profile = ({ navigation }: RouterProps) => {
-    const [profilePicture, setProfilePicture] = useState<string | null>(null);
+    const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
     const [userName, setUserName] = useState<string>('');
     const [userEmail, setUserEmail] = useState<string>('');
     const [userDocId, setUserDocId] = useState<string | null>(null);
@@ -22,12 +22,12 @@ const Profile = ({ navigation }: RouterProps) => {
     const [newName, setNewName] = useState<string>('');
 
     useEffect(() => {
-        const clearLocalProfilePicture = async () => {
-            await AsyncStorage.removeItem('profilePicture');
+        const clearLocalProfilePhoto = async () => {
+            await AsyncStorage.removeItem('profilePhoto');
         };
 
         const loadProfileData = async () => {
-            await clearLocalProfilePicture();
+            await clearLocalProfilePhoto();
 
             const currentUser = auth.currentUser;
             if (currentUser) {
@@ -43,10 +43,13 @@ const Profile = ({ navigation }: RouterProps) => {
                         console.log("User data:", data);
                         setUserName(data?.name || '');
                         setUserDocId(userDoc.id);
-                          
+
                         if (data?.profilePhoto) {
-                            setProfilePicture(data.profilePhoto);
-                            await AsyncStorage.setItem('profilePicture', data.profilePhoto);
+                            console.log("Profile photo URL fetched:", data.profilePhoto);
+                            setProfilePhoto(data.profilePhoto);
+                            await AsyncStorage.setItem('profilePhoto', data.profilePhoto);
+                        } else {
+                            console.log("No profile photo found in user data.");
                         }
                     } else {
                         console.error("User document not found for UID:", uid);
@@ -78,14 +81,14 @@ const Profile = ({ navigation }: RouterProps) => {
                 await uploadBytes(storageRef, blob);
 
                 const downloadURL = await getDownloadURL(storageRef);
-                console.log("Download URL:", downloadURL);
+                console.log("Generated Download URL:", downloadURL);
 
                 if (userDocId) {
                     const userDocRef = doc(FIREBASE_DB, 'users', userDocId);
-                    await updateDoc(userDocRef, { profilePicture: downloadURL });
+                    await updateDoc(userDocRef, { profilePhoto: downloadURL });
 
-                    setProfilePicture(downloadURL);
-                    await AsyncStorage.setItem('profilePicture', downloadURL);
+                    setProfilePhoto(downloadURL);
+                    await AsyncStorage.setItem('profilePhoto', downloadURL);
                 } else {
                     console.error("No user document ID found.");
                 }
@@ -140,7 +143,6 @@ const Profile = ({ navigation }: RouterProps) => {
             Alert.alert('Error logging out:', error.message);
         }
     };
-    console.log(profilePicture);
 
     return (
         <View style={styles.container}>
@@ -148,11 +150,14 @@ const Profile = ({ navigation }: RouterProps) => {
                 style={styles.profilePictureContainer}
                 onPress={handleUploadPicture}
             >
-                {profilePicture ? (
+                {profilePhoto ? (
                     <Image
                         style={styles.profilePicture}
-                        source={{ uri: profilePicture }}
-                        onError={(e) => console.log(e.nativeEvent.error)}
+                        source={{ uri: profilePhoto }}
+                        onError={(e) => {
+                            console.error('Failed to load profile photo', e.nativeEvent.error);
+                            setProfilePhoto(null);
+                        }}
                     />
                 ) : (
                     <Text style={styles.defaultText}>Choose a Photo</Text>

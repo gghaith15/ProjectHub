@@ -10,7 +10,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { SwipeListView } from 'react-native-swipe-list-view';
 import { useFocusEffect } from '@react-navigation/native';
 
-
 interface RouterProps {
   navigation: NavigationProp<any, any>;
 }
@@ -49,7 +48,7 @@ const Home = ({ navigation }: RouterProps) => {
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [userName, setUserName] = useState('');
-  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [projectTitles, setProjectTitles] = useState<{ [key: string]: string }>({});
 
@@ -144,9 +143,6 @@ const Home = ({ navigation }: RouterProps) => {
         }
       }
 
-      // Sort tasks by createdAt timestamp in descending order (recently added first)
-      // tasksData.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
-
       setTasks(tasksData);
     } catch (error) {
       console.error("Error fetching tasks:", error);
@@ -164,19 +160,13 @@ const Home = ({ navigation }: RouterProps) => {
 
   const handleTaskCheck = async (taskId: string) => {
     try {
-      // Fetch the task document from Firebase
       const taskDocRef = doc(FIREBASE_DB, 'tasks', taskId);
       const taskSnapshot = await getDoc(taskDocRef);
   
       if (taskSnapshot.exists()) {
         const taskData = taskSnapshot.data();
-  
-        // Calculate the new checked state
         const newCheckedState = !taskData.isChecked;
-  
-        // Update the task document in Firebase
         await updateDoc(taskDocRef, { isChecked: newCheckedState });
-
         fetchTasksData(); // Fetch tasks again after checking
       }
     } catch (error) {
@@ -191,7 +181,6 @@ const Home = ({ navigation }: RouterProps) => {
     for (const doc of snapshot.docs) {
       const data = doc.data();
       const isChecked = data.isChecked || false;
-      // Ensure createdAt is present, otherwise use a fallback Timestamp
       const createdAt = data.createdAt ?? Timestamp.now();
       tasksData.push({
         id: doc.id,
@@ -209,7 +198,7 @@ const Home = ({ navigation }: RouterProps) => {
     useCallback(() => {
       if (userId) {
         const fetchData = async () => {
-          await fetchUserData(userId); // Fetch user data including username and profile photo
+          await fetchUserData(userId);
           const fetchedProjects = await fetchProjects(userId);
           setProjects(fetchedProjects);
           const projectIds = fetchedProjects.map(project => project.id);
@@ -227,19 +216,18 @@ const Home = ({ navigation }: RouterProps) => {
       if (userDoc.exists()) {
         const data = userDoc.data();
         setUserName(data.name || '');
-        setProfilePicture(data.profilePhoto || null);
+        setProfilePhoto(data.profilePhoto || null);
         const fetchedProjects = await fetchProjects(uid);
         setProjects(fetchedProjects);
         const projectIds = fetchedProjects.map(project => project.id);
         await fetchTasks(projectIds);
       }
     } catch (error) {
-      console.error("Error fetching user data:", error);
+      // console.error("Error fetching user data:", error);
     }
   };
 
   useEffect(() => {
-
     onAuthStateChanged(auth, (user) => {
       if (user) {
         setUserId(user.uid);
@@ -255,14 +243,12 @@ const Home = ({ navigation }: RouterProps) => {
   }, []);
 
   useEffect(() => {
-    // Listen for real-time updates on tasks and re-sort them
     const tasksQuery = query(collection(FIREBASE_DB, 'tasks'));
     const unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
       const tasksData: Task[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
         const isChecked = data.isChecked || false;
-        // Ensure createdAt is present, otherwise use a fallback Timestamp
         const createdAt = data.createdAt ?? Timestamp.now();
         tasksData.push({
           id: doc.id,
@@ -273,12 +259,8 @@ const Home = ({ navigation }: RouterProps) => {
           createdAt: createdAt
         });
       });
-      // Sort tasks by createdAt timestamp in descending order (recently added first)
-      // tasksData.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
       setTasks(tasksData);
     });
-
-    // Don't use unsubscribeTasks, no need to clean up.
   }, []);
 
   return (
@@ -286,13 +268,20 @@ const Home = ({ navigation }: RouterProps) => {
       <View style={styles.topContainer}>
         <Text style={styles.welcomeText}>Welcome{'\n'}{userName ? userName : 'User'} &#x1F44B;</Text>
         <View style={styles.iconContainer}>
-          <TouchableOpacity style={styles.settingsIcon} onPress={toggleModal}>
+          {/* <TouchableOpacity style={styles.settingsIcon} onPress={toggleModal}>
             <FontAwesome name="gear" size={24} color="black" />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
           <View>
             <TouchableOpacity style={styles.profileIcon} onPress={() => navigation.navigate('Profile')}>
-              {profilePicture ? (
-                <Image source={{ uri: profilePicture }} style={styles.profilePicture} />
+              {profilePhoto ? (
+                <Image
+                  source={{ uri: profilePhoto }}
+                  style={styles.profilePicture}
+                  onError={(e) => {
+                    // console.error('Failed to load profile photo', e.nativeEvent.error);
+                    setProfilePhoto(null); // Clear the profile photo state if there's an error
+                  }}
+                />
               ) : (
                 <FontAwesome name="user" size={24} color="black" />
               )}
@@ -335,24 +324,6 @@ const Home = ({ navigation }: RouterProps) => {
       </View>
 
       <View style={styles.tasksContainer}>
-
-        {/* <ScrollView>
-        {tasks.length > 0 ? tasks.map((task) => (
-          <TaskComponent
-            key={task.id}
-            id={task.id}
-            taskDetails={task.taskDetails}
-            deadline={task.deadline}
-            onDelete={handleTaskDelete}
-            isChecked={task.isChecked}
-            onCheck={handleTaskCheck}
-            projectTitle={projectTitles[task.projectId]}
-          />
-        )) : (
-          <Text style={{ color: 'white' }}>No tasks available</Text>
-        )}
-        </ScrollView> */}
-
         <SwipeListView
           data={tasks}
           renderItem={({ item }) => (
@@ -378,7 +349,6 @@ const Home = ({ navigation }: RouterProps) => {
           )}
           rightOpenValue={-75}
         />
-
       </View>
     </View>
   );
@@ -427,9 +397,6 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
   },
-
-  //Tasks section
-
   TaskHeaderContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -452,16 +419,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-
   tasksContainer: {
     marginBottom: 95,
     borderRadius: 45,
     height: 375,
     padding: 20,
   },
-
-  //Swipe List View Styles
-  
   rowBack: {
     alignItems: 'center',
     backgroundColor: '#DD2C00',
@@ -474,15 +437,12 @@ const styles = StyleSheet.create({
     width: '90%',
     alignSelf: 'center',
   },
-
   deleteButtonContainer: {
     right: 10,
   },
-
   backTextWhite: {
     color: '#FFF',
   },
-
   deleteButton: {
     alignSelf: 'center',
   },
