@@ -111,6 +111,10 @@ const CreateProject = ({ navigation }: RouterProps) => {
   };
 
   const handleCreate = async () => {
+    if (!projectInfo.projectName.trim() || !projectInfo.priority.trim()) {
+      Alert.alert('Error', 'Project Name and Priority are required.');
+      return;
+    }
     try {
       const currentUser = auth.currentUser;
       if (!currentUser) {

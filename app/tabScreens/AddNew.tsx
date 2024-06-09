@@ -40,7 +40,9 @@ const AddNew = ({ navigation }: Props) => {
 
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [assignedMembers, setAssignedMembers] = useState([]);
-
+console.log('====================================');
+console.log("potatoasdasdsadsdad");
+console.log('====================================');
   const toggleModal = (type) => {
     setCreateType(type);
     setModalVisible(true);
@@ -139,8 +141,11 @@ const AddNew = ({ navigation }: Props) => {
   
 
   const handleCreate = async () => {
-    
     if (createType === 'Project') {
+      if (!projectInfo.projectName.trim() || !projectInfo.priority.trim()) {
+        Alert.alert('Error', 'Project Name and Priority are required.');
+        return;
+      }
       // console.log('Create Project:', projectInfo);
 
       try {

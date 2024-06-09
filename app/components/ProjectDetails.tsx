@@ -590,6 +590,7 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
       </View>
 
       <SwipeListView
+      style={styles.SwipeListViewContainer}
         data={tasks}
         renderItem={({ item }) => (
           <TaskComponent
@@ -864,6 +865,12 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   taskAddButton: {},
+
+  SwipeListViewContainer: {
+    // backgroundColor: 'red',
+    borderRadius: 45,
+    marginBottom: 30,
+  },
 
   // Swipe List View Styles
 

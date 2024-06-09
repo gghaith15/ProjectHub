@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { NavigationProp } from '@react-navigation/native';
 import { FontAwesome } from '@expo/vector-icons';
@@ -8,6 +8,8 @@ import { Timestamp, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, que
 import { FIREBASE_DB, auth } from '../../FirebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import { SwipeListView } from 'react-native-swipe-list-view';
+import { useFocusEffect } from '@react-navigation/native';
+
 
 interface RouterProps {
   navigation: NavigationProp<any, any>;
@@ -203,24 +205,40 @@ const Home = ({ navigation }: RouterProps) => {
     setTasks(tasksData);
   };
 
-  useEffect(() => {
-    const fetchUserData = async (uid: string) => {
-      try {
-        const userRef = doc(collection(FIREBASE_DB, "users"), uid);
-        const userDoc = await getDoc(userRef);
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          setUserName(data.name || '');
-          setProfilePicture(data.profilePhoto || null);
-          const fetchedProjects = await fetchProjects(uid);
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) {
+        const fetchData = async () => {
+          await fetchUserData(userId); // Fetch user data including username and profile photo
+          const fetchedProjects = await fetchProjects(userId);
           setProjects(fetchedProjects);
           const projectIds = fetchedProjects.map(project => project.id);
           await fetchTasks(projectIds);
-        }
-      } catch (error) {
-        console.error("Error fetching user data:", error);
+        };
+        fetchData();
       }
-    };
+    }, [userId])
+  );
+
+  const fetchUserData = async (uid: string) => {
+    try {
+      const userRef = doc(collection(FIREBASE_DB, "users"), uid);
+      const userDoc = await getDoc(userRef);
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserName(data.name || '');
+        setProfilePicture(data.profilePhoto || null);
+        const fetchedProjects = await fetchProjects(uid);
+        setProjects(fetchedProjects);
+        const projectIds = fetchedProjects.map(project => project.id);
+        await fetchTasks(projectIds);
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    }
+  };
+
+  useEffect(() => {
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -409,6 +427,9 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
   },
+
+  //Tasks section
+
   TaskHeaderContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -431,9 +452,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+
   tasksContainer: {
     marginBottom: 95,
-    borderRadius: 25,
+    borderRadius: 45,
     height: 375,
     padding: 20,
   },

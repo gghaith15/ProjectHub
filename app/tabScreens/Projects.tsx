@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Button } from 'react-native';
 import ProjectComponent from '../components/ProjectComponent';
-import { NavigationProp } from '@react-navigation/native';
+import { NavigationProp, useFocusEffect } from '@react-navigation/native';
 import { Timestamp, collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { FIREBASE_DB, auth } from '../../FirebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -126,6 +126,14 @@ const Projects = ({ navigation }: RouterProps) => {
       console.error("Error fetching projects:", error);
     }
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) {
+        fetchProjects(userId);
+      }
+    }, [userId])
+  );
 
   useEffect(() => {
     const fetchUserData = async (uid: string) => {
