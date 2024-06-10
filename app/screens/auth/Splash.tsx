@@ -30,23 +30,23 @@ const Splash = ({ navigation }: RouterProps) => {
 
       <View style={styles.slide}>
       <Image source={require('../../assets/splash_design_1.png')} style={styles.image} />
-        <Text style={styles.title}>Feature One</Text>
-        <Text style={styles.text}>Description of feature one goes here. Explain the benefit to the user.</Text>
+        <Text style={styles.title}>Seamless Project Management</Text>
+        <Text style={styles.text}>Easily manage all your projects in one place with an intuitive interface.</Text>
           <TouchableOpacity style={styles.skipButton} onPress={() => navigation.navigate('Login')}>
             <Text style={styles.skipButtonText}>Skip</Text>
           </TouchableOpacity>
       </View>
 
       <View style={styles.slide}>
-      <Image source={require('../../assets/splash_design_1.png')} style={styles.image} />
-        <Text style={styles.title}>Feature Two</Text>
-        <Text style={styles.text}>Description of feature two goes here. Explain the benefit to the user.</Text>
+      <Image source={require('../../assets/splash_design_3.png')} style={styles.image} />
+        <Text style={styles.title}>Collaborative Work</Text>
+        <Text style={styles.text}>Work together seamlessly with your team.</Text>
       </View>
 
       <View style={styles.slide}>
-      <Image source={require('../../assets/splash_design_1.png')} style={styles.image} />
-        <Text style={styles.title}>Feature Three</Text>
-        <Text style={styles.text}>Description of feature three goes here. Explain the benefit to the user.</Text>
+      <Image source={require('../../assets/splash_design_2.png')} style={styles.image} />
+        <Text style={styles.title}>Clear Space</Text>
+        <Text style={styles.text}>Keep your workspace clutter-free and focus on what matters most.</Text>
         <TouchableOpacity style={styles.getStartedButton} onPress={() => navigation.navigate('Login')}>
           <Text style={styles.buttonText}>Get Started</Text>
         </TouchableOpacity>
@@ -91,11 +91,12 @@ const styles = StyleSheet.create({
   skipButton: {
     backgroundColor: '#C9EF76',
     padding: 10,
-    marginTop: 20,    width: 80, // Adjust the width of the button
-    height: 80, // Adjust the height of the button
-    borderRadius: 40, // Half of the width and height for circular shape    alignItems: 'center',
+    marginTop: 20,    
+    width: '50%',    // Adjust the width of the button
+    borderRadius: 20, // Half of the width and height for circular shape    alignItems: 'center',
     justifyContent: 'center',
     alignItems: 'center',
+    
   },
 
   skipButtonText: {

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TextInput, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import React, { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { NavigationProp } from '@react-navigation/native';
@@ -36,6 +36,7 @@ const Login = ({ navigation }: RouterProps) => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
+      <Image source={require('../../assets/logo.png')} style={styles.logo} />
       <TextInput
         value={email}
         style={styles.input}
@@ -82,6 +83,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 30,
     backgroundColor: 'black',
+  },
+
+  logo: {
+    width: 200,
+    height: 200,
+    alignSelf: 'center',
   },
 
   buttonContainer: {
