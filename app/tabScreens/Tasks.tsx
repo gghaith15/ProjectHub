@@ -125,7 +125,7 @@ const Tasks = ({ navigation }: RouterProps) => {
         deadline: data.deadline,
         projectId: data.projectId,
         isChecked: isChecked,
-        createdAt: createdAt,
+        createdAt: createdAt
       });
     }
     setTasks(tasksData);

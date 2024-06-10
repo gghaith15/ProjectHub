@@ -33,7 +33,10 @@ const MainNavigator = () => {
       {/* Profile screen */}
       <Stack.Screen
         name="CreateProject" 
-        component={CreateProject} 
+        component={CreateProject}
+        options={{
+          headerShown: false,
+        }}
         />
 
 
