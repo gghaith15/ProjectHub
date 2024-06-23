@@ -41,6 +41,7 @@ const TabNavigator = ({ navigation }: RouterProps) => {
             color={color}
             />
           ),
+          unmountOnBlur:true
         }}
         name="Home"
         component={Home}
@@ -59,6 +60,7 @@ const TabNavigator = ({ navigation }: RouterProps) => {
               color= {color}
             />
           ),
+          unmountOnBlur:true
         }}
       />
 
@@ -77,6 +79,8 @@ const TabNavigator = ({ navigation }: RouterProps) => {
             // <Image source={require('../assets/tasks2.png')} style={styles.image} />
 
           ),
+          unmountOnBlur:true
+
         }}
       />
 
@@ -93,6 +97,8 @@ const TabNavigator = ({ navigation }: RouterProps) => {
             color={color}
             />
           ),
+          unmountOnBlur:true
+
         }}
       />
 

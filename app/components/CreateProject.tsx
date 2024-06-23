@@ -38,12 +38,22 @@ const CreateProject = ({ navigation }: RouterProps) => {
     const currentDate = selectedDate || projectInfo.startDate;
     setShowStartDatePicker(Platform.OS === 'ios');
     setProjectInfo({ ...projectInfo, startDate: currentDate });
+
+    // Ensure end date is not before the start date
+    if (projectInfo.endDate < currentDate) {
+      setProjectInfo({ ...projectInfo, endDate: currentDate });
+    }
   };
 
   const handleEndDateChange = (event, selectedDate) => {
     const currentDate = selectedDate || projectInfo.endDate;
     setShowEndDatePicker(Platform.OS === 'ios');
-    setProjectInfo({ ...projectInfo, endDate: currentDate });
+    if (currentDate < projectInfo.startDate) {
+      Alert.alert('Error', 'End date cannot be before start date.');
+      setProjectInfo({ ...projectInfo, endDate: projectInfo.startDate });
+    } else {
+      setProjectInfo({ ...projectInfo, endDate: currentDate });
+    }
   };
 
   const handlePrioritySelection = (priority) => {

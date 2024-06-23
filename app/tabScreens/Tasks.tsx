@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, Button, TouchableOpacity } from 'react-native';
-import { NavigationProp } from '@react-navigation/native';
-import { Timestamp, collection, getDocs, onSnapshot, doc, updateDoc, deleteDoc, getDoc, query, where } from 'firebase/firestore';
-import { FIREBASE_DB } from '../../FirebaseConfig';
+import { View, Text, StyleSheet, Button, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { NavigationProp, useFocusEffect } from '@react-navigation/native';
+import { Timestamp, collection, getDocs, doc, updateDoc, deleteDoc, getDoc, query, where } from 'firebase/firestore';
+import { FIREBASE_DB, auth } from '../../FirebaseConfig';
 import TaskComponent from '../components/TaskComponent';
 import { FontAwesome } from '@expo/vector-icons';
 import { SwipeListView } from 'react-native-swipe-list-view';
+import { onAuthStateChanged } from 'firebase/auth';
 
 interface RouterProps {
   navigation: NavigationProp<any, any>;
@@ -26,70 +27,84 @@ interface ProjectData {
 }
 
 const Tasks = ({ navigation }: RouterProps) => {
-  const [selectedSortCriteria, setSelectedSortCriteria] = useState<'recentlyAdded' | 'highToLow' | 'lowToHigh'>('recentlyAdded');
-  const [isModalVisible, setIsModalVisible] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projectTitles, setProjectTitles] = useState<{ [key: string]: string }>({});
-  const [refreshing, setRefreshing] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [projects, setProjects] = useState<ProjectData[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState<boolean>(false);
+  const [loadingProjects, setLoadingProjects] = useState<boolean>(false);
 
-  const toggleModal = () => {
-    setIsModalVisible(!isModalVisible);
-  };
-
-  const handleSortChange = (criteria: 'recentlyAdded' | 'highToLow' | 'lowToHigh') => {
-    setSelectedSortCriteria(criteria);
-    toggleModal();
-  };
-
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async (uid: string): Promise<ProjectData[]> => {
+    setLoadingProjects(true);
     try {
       const projectsData: ProjectData[] = [];
-      const querySnapshot = await getDocs(collection(FIREBASE_DB, 'project'));
-
-      querySnapshot.forEach((doc) => {
+      const createdQuery = query(collection(FIREBASE_DB, 'project'), where('creatorId', '==', uid));
+      const assignedQuery = query(collection(FIREBASE_DB, 'project'), where('assignedMembers', 'array-contains', uid));
+  
+      const [createdSnapshot, assignedSnapshot] = await Promise.all([
+        getDocs(createdQuery),
+        getDocs(assignedQuery),
+      ]);
+  
+      createdSnapshot.forEach((doc) => {
         const data = doc.data();
         projectsData.push({ id: doc.id, projectName: data.projectName });
       });
-
+  
+      assignedSnapshot.forEach((doc) => {
+        const data = doc.data();
+        projectsData.push({ id: doc.id, projectName: data.projectName });
+      });
+  
       const titles: { [key: string]: string } = {};
       projectsData.forEach((project) => {
         titles[project.id] = project.projectName;
       });
-
+  
       setProjectTitles(titles);
+  
+      return projectsData;
     } catch (error) {
       console.error('Error fetching projects:', error);
+      return [];
+    } finally {
+      setLoadingProjects(false);
     }
-  };
+  }, []);
 
-  const fetchTasks = async (projectIds: string[]) => {
+  const fetchTasks = useCallback(async (projectIds: string[]) => {
+    setLoadingTasks(true);
     try {
-      const tasksData: Task[] = [];
-
-      for (const projectId of projectIds) {
-        const tasksQuery = query(collection(FIREBASE_DB, 'tasks'), where('projectId', '==', projectId));
-        const tasksSnapshot = await getDocs(tasksQuery);
-
-        for (const doc of tasksSnapshot.docs) {
-          const taskData = doc.data() as Omit<Task, 'id'>;
-          const isChecked = taskData.isChecked || false;
-
-          const createdAt = taskData.createdAt ?? Timestamp.now();
-
-          tasksData.push({ id: doc.id, ...taskData, isChecked, createdAt });
-        }
+      if (projectIds.length === 0) {
+        setTasks([]);
+        return;
       }
 
-      setTasks(tasksData);
+      const tasksQuery = query(collection(FIREBASE_DB, 'tasks'));
+      const tasksSnapshot = await getDocs(tasksQuery);
+      const tasksData: Task[] = [];
+      
+      tasksSnapshot.forEach((doc) => {
+        const taskData = doc.data() as Omit<Task, 'id'>;
+        const isChecked = taskData.isChecked || false;
+        const createdAt = taskData.createdAt ?? Timestamp.now();
+        tasksData.push({ id: doc.id, ...taskData, isChecked, createdAt });
+      });
+
+      const filteredTasks = tasksData.filter(task => projectIds.includes(task.projectId));
+      setTasks(filteredTasks);
     } catch (error) {
       console.error("Error fetching tasks:", error);
+    } finally {
+      setLoadingTasks(false);
     }
-  };
+  }, []);
 
   const handleTaskDelete = async (taskId: string) => {
     try {
       await deleteDoc(doc(FIREBASE_DB, 'tasks', taskId));
-      fetchTasksData(); // Fetch tasks again after deletion
+      const projectIds = Object.keys(projectTitles);
+      await fetchTasks(projectIds);
     } catch (error) {
       console.error('Error deleting task:', error);
     }
@@ -104,62 +119,59 @@ const Tasks = ({ navigation }: RouterProps) => {
         const taskData = taskSnapshot.data();
         const newCheckedState = !taskData.isChecked;
         await updateDoc(taskDocRef, { isChecked: newCheckedState });
-        fetchTasksData(); // Fetch tasks again after checking
+        const projectIds = Object.keys(projectTitles);
+        await fetchTasks(projectIds);
       }
     } catch (error) {
       console.error('Failed to save checkbox state:', error);
     }
   };
 
-  const fetchTasksData = async () => {
-    const tasksQuery = query(collection(FIREBASE_DB, 'tasks'));
-    const snapshot = await getDocs(tasksQuery);
-    const tasksData: Task[] = [];
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
-      const isChecked = data.isChecked || false;
-      const createdAt = data.createdAt ?? Timestamp.now();
-      tasksData.push({
-        id: doc.id,
-        taskDetails: data.taskDetails,
-        deadline: data.deadline,
-        projectId: data.projectId,
-        isChecked: isChecked,
-        createdAt: createdAt
-      });
+  const fetchUserData = async (uid: string) => {
+    try {
+      const userRef = doc(collection(FIREBASE_DB, "users"), uid);
+      const userDoc = await getDoc(userRef);
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        await fetchProjects(uid);
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
     }
-    setTasks(tasksData);
   };
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) {
+        const fetchData = async () => {
+          await fetchUserData(userId);
+          const fetchedProjects = await fetchProjects(userId);
+          setProjects(fetchedProjects);
+          const projectIds = fetchedProjects.map(project => project.id);
+          await fetchTasks(projectIds);
+        };
+        fetchData();
+      }
+    }, [userId, fetchProjects, fetchTasks])
+  );
 
   useEffect(() => {
-    fetchTasksData();
-  }, []);
-
-  useEffect(() => {
-    const tasksQuery = query(collection(FIREBASE_DB, 'tasks'));
-    const unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
-      const tasksData: Task[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        const isChecked = data.isChecked || false;
-        const createdAt = data.createdAt ?? Timestamp.now();
-        tasksData.push({
-          id: doc.id,
-          taskDetails: data.taskDetails,
-          deadline: data.deadline,
-          projectId: data.projectId,
-          isChecked: isChecked,
-          createdAt: createdAt,
-        });
-      });
-
-      setTasks(tasksData);
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+        fetchUserData(user.uid);
+      } else {
+        console.error("No user is logged in");
+      }
     });
   }, []);
+
+  useEffect(() => {
+    if (Object.keys(projectTitles).length > 0) {
+      const projectIds = Object.keys(projectTitles);
+      fetchTasks(projectIds);
+    }
+  }, [projectTitles, fetchTasks]);
 
   return (
     <View style={styles.container}>
@@ -167,40 +179,44 @@ const Tasks = ({ navigation }: RouterProps) => {
         <Text style={styles.headerText}>MANAGE{'\n'}YOUR TASKS</Text>
       </View>
 
-      <Button title="Sort / Filter" onPress={toggleModal} />
+      {/* <Button title="Sort / Filter" onPress={toggleModal} />
 
       {isModalVisible && (
         <View style={styles.modal}>
           <Button title="Recently Added" onPress={() => handleSortChange('recentlyAdded')} />
           <Button title="Close" onPress={toggleModal} />
         </View>
-      )}
+      )} */}
 
-      <SwipeListView
-        data={tasks}
-        renderItem={({ item }) => (
-          <TaskComponent
-            id={item.id}
-            taskDetails={item.taskDetails}
-            deadline={item.deadline}
-            onDelete={handleTaskDelete}
-            isChecked={item.isChecked}
-            onCheck={() => handleTaskCheck(item.id)}
-            projectTitle={projectTitles[item.projectId]}
-          />
-        )}
-        renderHiddenItem={({ item }) => (
-          <View style={styles.rowBack}>
-            <TouchableOpacity
-              style={[styles.deleteButtonContainer]}
-              onPress={() => handleTaskDelete(item.id)}
-            >
-              <FontAwesome style={styles.deleteButton} name="trash" color={'#fff'} size={24} />
-            </TouchableOpacity>
-          </View>
-        )}
-        rightOpenValue={-75}
-      />
+      {loadingTasks || loadingProjects ? (
+        <ActivityIndicator size="large" color="#C9EF76" style={{ marginTop: 20 }} />
+      ) : (
+        <SwipeListView
+          data={tasks}
+          renderItem={({ item }) => (
+            <TaskComponent
+              id={item.id}
+              taskDetails={item.taskDetails}
+              deadline={item.deadline}
+              onDelete={handleTaskDelete}
+              isChecked={item.isChecked}
+              onCheck={() => handleTaskCheck(item.id)}
+              projectTitle={projectTitles[item.projectId]}
+            />
+          )}
+          renderHiddenItem={({ item }) => (
+            <View style={styles.rowBack}>
+              <TouchableOpacity
+                style={[styles.deleteButtonContainer]}
+                onPress={() => handleTaskDelete(item.id)}
+              >
+                <FontAwesome style={styles.deleteButton} name="trash" color={'#fff'} size={24} />
+              </TouchableOpacity>
+            </View>
+          )}
+          rightOpenValue={-75}
+        />
+      )}
     </View>
   );
 };

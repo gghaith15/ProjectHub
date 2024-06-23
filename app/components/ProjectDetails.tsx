@@ -150,6 +150,7 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
 
   const fetchTasksData = async () => {
     try {
+
       const tasksQuery = query(collection(FIREBASE_DB, 'tasks'), where('projectId', '==', project.projectId));
       const snapshot = await getDocs(tasksQuery);
       const tasksData: Task[] = [];
@@ -230,9 +231,9 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
       setTasks(tasksData);
     });
 
-    // Don't use unsubscribeTasks, no need to clean up.
   }, [project.projectId]);
-
+  console.log("tasks",tasks);
+  
   const handleSaveEdits = async () => {
     const projectDocRef = doc(FIREBASE_DB, 'project', project.projectId);
 
@@ -361,28 +362,31 @@ const ProjectDetails: React.FC<{ navigation: any, route: any }> = ({ navigation,
 
   const handleRemoveMember = async (memberId: string) => {
     const projectDocRef = doc(FIREBASE_DB, 'project', project.projectId);
-
+  
     const memberToRemove = projectData.assignedMembers.find(member => member.memberId === memberId);
-
+  
     if (!memberToRemove) {
       console.error('Member not found');
       return;
     }
-
+  
     try {
       await updateDoc(projectDocRef, {
-        assignedMembers: arrayRemove(memberToRemove),
+        assignedMembers: arrayRemove(memberToRemove.memberId),
       });
-
+  
       setProjectData((prevData) => ({
         ...prevData,
         assignedMembers: prevData.assignedMembers.filter(member => member.memberId !== memberId),
       }));
-
+  
+      Alert.alert('Member removed successfully');
     } catch (error) {
       console.error('Error removing member:', error);
+      Alert.alert('Error removing member:', error.message);
     }
   };
+  
 
   const getPriorityColor = (priority: string): string => {
     switch (priority.toLowerCase()) {
